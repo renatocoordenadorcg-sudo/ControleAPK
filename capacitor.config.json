@@ -1,0 +1,19 @@
+{
+  "appId": "br.com.newline.controleequipamentos",
+  "appName": "Newline Controle",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https",
+    "hostname": "localhost",
+    "cleartext": true,
+    "allowNavigation": [
+      "*",
+      "*.*",
+      "*.*.*.*"
+    ],
+    "errorPath": "erro.html"
+  },
+  "android": {
+    "allowMixedContent": true
+  }
+}
