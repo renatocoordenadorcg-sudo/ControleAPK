@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="pt-BR"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Controle Equipamentos</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:#02301f;color:#fff;font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;padding:20px}
+.box{width:100%;max-width:420px;background:#0a4a33;border-radius:14px;padding:22px;box-shadow:0 6px 24px #0006}
+h1{font-size:20px;margin:0 0 4px}.sub{font-size:13px;opacity:.75;margin:0 0 18px}
+label{display:block;font-size:13px;margin:12px 0 4px;opacity:.9}
+input[type=text],input[type=number]{width:100%;padding:12px;border-radius:8px;border:1px solid #2c7a5a;background:#06382a;color:#fff;font-size:16px}
+.row{display:flex;gap:10px}.row>div:first-child{flex:1}.row>div:last-child{width:110px}
+.chk{display:flex;align-items:center;gap:8px;margin:14px 0 4px;font-size:14px}
+button{width:100%;padding:13px;margin-top:12px;border:0;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer;background:#19b37a;color:#02301f}
+button.sec{background:transparent;color:#fff;border:1px solid #2c7a5a;font-weight:500}
+#st{min-height:20px;font-size:13px;margin-top:12px}
+.ok{color:#7dffc2}.bad{color:#ffb4b4}.info{color:#cfe}
+.hide{display:none}.c{text-align:center}
+.addr{word-break:break-all;font-weight:600;margin:10px 0 4px}
+</style></head><body>
+
+<div class="box" id="cfg">
+  <h1>Controle Equipamentos</h1>
+  <p class="sub">Informe o endereço do servidor. Pode ser IP interno, IP externo ou domínio.</p>
+  <label for="host">IP ou domínio</label>
+  <div class="row">
+    <div><input id="host" type="text" inputmode="url" autocapitalize="off" autocomplete="off" placeholder="ex.: 200.150.10.20"></div>
+    <div><input id="port" type="number" inputmode="numeric" min="1" max="65535" placeholder="8765"></div>
+  </div>
+  <label class="chk"><input id="https" type="checkbox"> Usar HTTPS (marque só se o servidor tiver certificado)</label>
+  <button id="go">Salvar e conectar</button>
+  <button class="sec" id="test">Testar conexão</button>
+  <button class="sec" id="cam">Permitir câmera</button>
+  <div id="st"></div>
+</div>
+
+<div class="box c hide" id="splash">
+  <h1>Conectando…</h1>
+  <div class="addr" id="addr"></div>
+  <button id="now">Abrir agora</button>
+</div>
+
+<script>
+const KEY="nl_server", $=s=>document.querySelector(s);
+let timer=null;
+const load=()=>{try{return JSON.parse(localStorage.getItem(KEY)||"null")}catch(e){return null}};
+const save=o=>localStorage.setItem(KEY,JSON.stringify(o));
+const urlOf=o=>(o.https?"https":"http")+"://"+o.host+(o.port?":"+o.port:"")+"/";
+const say=(t,c)=>{$("#st").className=c||"info";$("#st").textContent=t};
+
+function read(){
+  let h=$("#host").value.trim().replace(/^https?:\/\//i,"").replace(/\/.*$/,"");
+  let p=$("#port").value.trim();
+  const m=h.match(/^([^:]+):(\d+)$/);            // aceita colar "ip:porta" no campo do endereço
+  if(m){h=m[1]; if(!p)p=m[2]}
+  if(!/^[A-Za-z0-9.\-]+$/.test(h)) return {erro:"Endereço inválido. Use só números/letras e pontos (ex.: 200.150.10.20)."};
+  if(p===""&&!$("#https").checked) p="8765";
+  if(p!==""&&!(/^\d+$/.test(p)&&+p>=1&&+p<=65535)) return {erro:"Porta inválida (use de 1 a 65535)."};
+  return {host:h,port:p,https:$("#https").checked};
+}
+function fill(o){ if(!o)return; $("#host").value=o.host; $("#port").value=o.port; $("#https").checked=!!o.https }
+function showCfg(o){
+  clearTimeout(timer);
+  const saved=load();
+  if(saved){ startGo(saved); return; }
+  $("#splash").classList.add("hide");
+  $("#cfg").classList.remove("hide");
+  fill(o);
+  if(!$("#port").value)$("#port").value="8765";
+}
+function open_(o){ location.href=urlOf(o) }
+function startGo(o){
+  $("#cfg").classList.add("hide"); $("#splash").classList.remove("hide"); $("#addr").textContent=urlOf(o);
+  timer=setTimeout(()=>open_(o),500);
+  $("#now").onclick=()=>{clearTimeout(timer);open_(o)};
+}
+async function askCam(){
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia) return false;
+  try{const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}});s.getTracks().forEach(t=>t.stop());return true}catch(e){return false}
+}
+$("#cam").onclick=async()=>{
+  say("Aguardando sua resposta no aviso do Android…");
+  const ok=await askCam();
+  localStorage.setItem("nl_cam","1");
+  say(ok?"Câmera liberada.":"Câmera não liberada. Você pode permitir depois em Configurações do Android > Apps > Controle Equipamentos > Permissões.",ok?"ok":"bad");
+};
+$("#test").onclick=async()=>{
+  const o=read(); if(o.erro) return say(o.erro,"bad");
+  say("Testando "+urlOf(o)+" …");
+  const ac=new AbortController(), t=setTimeout(()=>ac.abort(),6000);
+  try{await fetch(urlOf(o),{mode:"no-cors",cache:"no-store",signal:ac.signal});say("Servidor respondeu. Pode conectar.","ok")}
+  catch(e){say("Não foi possível alcançar o servidor. Confira IP, porta, Wi-Fi/dados e o redirecionamento no roteador.","bad")}
+  finally{clearTimeout(t)}
+};
+$("#go").onclick=async()=>{
+  const o=read(); if(o.erro) return say(o.erro,"bad");
+  save(o);
+  if(!localStorage.getItem("nl_cam")){ say("Permita a câmera quando o Android perguntar…"); await askCam(); localStorage.setItem("nl_cam","1") }
+  open_(o);
+};
+// Após salvar, o endereço fica bloqueado pela interface. Para cadastrar outro servidor,
+// é necessário limpar os dados do aplicativo Android (o que também apaga o armazenamento local).
+addEventListener("pageshow",e=>{ if(e.persisted){ const saved=load(); if(saved)startGo(saved); else showCfg(null); } });
+const s=load();
+if(s) startGo(s); else showCfg(null);
+</script></body></html>
